@@ -20,9 +20,23 @@ enum ThreatType: String, CaseIterable {
         case .unknown: T("Інше", "Other")
         }
     }
+    /// Short plural for "23 шахеди" style counts.
+    var short: String {
+        switch self {
+        case .uav: T("шахеди", "Shaheds")
+        case .fpv: "FPV"
+        case .recon: T("розвідники", "recon")
+        case .missile: T("ракети", "missiles")
+        case .ballistic: T("балістика", "ballistic")
+        case .kab: T("КАБи", "KABs")
+        case .mig31k: T("МіГ-31К", "MiG-31K")
+        case .unknown: T("інше", "other")
+        }
+    }
     var symbol: String {
         switch self {
-        case .uav, .fpv: "airplane"
+        case .uav: "airplane"
+        case .fpv: "scope"
         case .recon: "binoculars.fill"
         case .missile: "flame.fill"
         case .ballistic: "arrow.up.forward"
@@ -34,7 +48,7 @@ enum ThreatType: String, CaseIterable {
     var color: Color {
         switch self {
         case .uav: Color(red: 0.71, green: 0.36, blue: 1.0)
-        case .fpv: Color(red: 0.85, green: 0.5, blue: 1.0)
+        case .fpv: Color(red: 0.2, green: 0.85, blue: 0.72)
         case .recon: Color(red: 0.35, green: 0.78, blue: 0.98)
         case .missile: Color(red: 1.0, green: 0.18, blue: 0.47)
         case .ballistic: Color(red: 0.9, green: 0.0, blue: 0.24)
@@ -87,9 +101,9 @@ final class ThreatStore {
     /// Real threats (not advisories), with group sizes.
     var total: Int { threats.filter { !$0.advisory }.reduce(0) { $0 + $1.count } }
 
-    func counts() -> [(ThreatType, Int)] {
+    func counts(_ list: [Threat]? = nil) -> [(ThreatType, Int)] {
         var c: [ThreatType: Int] = [:]
-        for t in threats { c[t.type, default: 0] += t.count }
+        for t in list ?? threats { c[t.type, default: 0] += t.count }
         return ThreatType.allCases.compactMap { k in c[k].map { (k, $0) } }
     }
 
@@ -226,22 +240,36 @@ struct ThreatLayer: View {
     }
 }
 
-/// Compact "✈︎ 11 · 🔥 2" summary by type.
+/// "✈︎ 23 шахеди  ◎ 5 FPV" summary by type; drops the words when they don't fit.
 struct ThreatChips: View {
     let counts: [(ThreatType, Int)]
     var size: CGFloat = 11
 
     var body: some View {
-        HStack(spacing: 8) {
+        ViewThatFits(in: .horizontal) {
+            row(labeled: true)
+            row(labeled: false)
+        }
+        .font(.system(size: size, weight: .semibold))
+    }
+
+    private func row(labeled: Bool) -> some View {
+        HStack(spacing: labeled ? 10 : 8) {
             ForEach(counts, id: \.0) { type, n in
                 HStack(spacing: 3) {
                     Image(systemName: type.symbol).foregroundStyle(type.color)
                     Text("\(n)").monospacedDigit()
+                    if labeled { Text(type.short).fontWeight(.regular).opacity(0.75) }
                 }
+                .fixedSize()
                 .help(type.title)
             }
         }
-        .font(.system(size: size, weight: .semibold))
+    }
+
+    /// "3 шахеди, 1 FPV"
+    static func text(_ counts: [(ThreatType, Int)]) -> String {
+        counts.map { "\($0.1) \($0.0.short)" }.joined(separator: ", ")
     }
 }
 

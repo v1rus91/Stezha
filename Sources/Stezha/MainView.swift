@@ -97,7 +97,7 @@ struct MainView: View {
                             .foregroundStyle(.secondary)
                     }
                     if let (t, d) = threats.nearest(to: store.location), d < 100_000 {
-                        Label(T("Найближча загроза: ", "Nearest threat: ") + t.type.title.lowercased() + " · " + Dist.km(d) + (t.heading.map { " " + Dist.arrow($0) } ?? ""),
+                        Label(T("Найближча загроза: ", "Nearest threat: ") + t.title + " · " + Dist.km(d) + (t.heading.map { " " + Dist.arrow($0) } ?? ""),
                               systemImage: t.type.symbol)
                             .font(.callout.weight(.semibold)).foregroundStyle(t.type.color)
                     }

@@ -303,12 +303,13 @@ struct NotchView: View {
 
             if !threats.threats.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
+                    Text(T("У повітрі зараз", "In the air now")).font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.5))
                     ThreatChips(counts: threats.counts(), size: 12)
                     if let (t, d) = threats.nearest(to: store.location) {
-                        Text(T("найближча: ", "nearest: ") + t.type.title.lowercased() + " · " + Dist.km(d))
+                        Text(T("Найближча: ", "Nearest: ") + t.title + " · " + Dist.km(d))
                             .font(.system(size: 11)).foregroundStyle(d < 50_000 ? Palette.alert : .white.opacity(0.6)).lineLimit(1)
                     } else if case let near = threats.inRegion(store.home), !near.isEmpty {
-                        Text(T("у вашій області: ", "in your oblast: ") + "\(near.reduce(0) { $0 + $1.count })")
+                        Text(T("У вашій області: ", "In your oblast: ") + ThreatChips.text(threats.counts(near)))
                             .font(.system(size: 11)).foregroundStyle(Palette.partial).lineLimit(1)
                     }
                 }
