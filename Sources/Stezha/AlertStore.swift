@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import UserNotifications
 import Observation
+import CoreLocation
 
 enum AlertKind: String, Codable {
     case airRaid = "air_raid", artillery = "artillery_shelling", urbanFights = "urban_fights"
@@ -91,6 +92,8 @@ final class AlertStore {
 
     enum LocationState { case off, searching, found, denied, failed, outside }
     var locationState: LocationState = .off
+    /// The Mac’s last position (only with geolocation on), for distances to threats.
+    var location: CLLocation?
 
     func applyLocation(oblast: String, raion: String, locality: String) {
         if home != oblast { home = oblast }

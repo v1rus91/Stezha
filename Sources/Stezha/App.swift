@@ -6,7 +6,8 @@ import UserNotifications
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = AlertStore()
-    lazy var notch = NotchController(store: store)
+    let threats = ThreatStore()
+    lazy var notch = NotchController(store: store, threats: threats)
     private var statusItem: StatusItemController?
     lazy var location = LocationService(store: store)
     var openMain: () -> Void = {}
@@ -19,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = StatusItemController(store: store, delegate: self)
         location.start()
         Task { await store.run() }
+        Task { await threats.run() }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -38,6 +40,7 @@ struct StezhaApp: App {
         Window(T("Стежа", "Stezha"), id: "main") {
             MainView()
                 .environment(delegate.store)
+                .environment(delegate.threats)
                 .frame(minWidth: 980, minHeight: 700)
                 .id(lang)
                 .background(OpenWindowBridge(delegate: delegate))
@@ -48,6 +51,7 @@ struct StezhaApp: App {
         Settings {
             SettingsView(delegate: delegate)
                 .environment(delegate.store)
+                .environment(delegate.threats)
                 .id(lang)
         }
     }
@@ -107,7 +111,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         let host = NSHostingController(rootView: MenuBarMenu(
             open: { [weak self] in self?.popover.performClose(nil); delegate.openMain() },
             settings: { [weak self] in self?.popover.performClose(nil); delegate.openSettings() }
-        ).environment(store))
+        ).environment(store).environment(delegate.threats))
         host.sizingOptions = .preferredContentSize
         popover.contentViewController = host
         popover.show(relativeTo: b.bounds, of: b, preferredEdge: .minY)
@@ -146,6 +150,7 @@ struct MenuBarMenu: View {
     let open: () -> Void
     let settings: () -> Void
     @Environment(AlertStore.self) private var store
+    @Environment(ThreatStore.self) private var threats
 
     var body: some View {
         let s = store.homeStatus
@@ -169,11 +174,18 @@ struct MenuBarMenu: View {
             .padding(12)
             .glassEffect(.regular.tint(tint.opacity(0.15)), in: .rect(cornerRadius: 16))
 
-            UkraineMap(states: store.states, home: store.home, compact: true, interactive: false)
+            UkraineMap(states: store.states, home: store.home, compact: true, interactive: false, threats: threats.mapped)
                 .frame(height: 170)
 
             Text(T("\(store.activeCount) з \(Regions.all.count) регіонів у тривозі", "\(store.activeCount) of \(Regions.all.count) regions on alert"))
                 .font(.callout).foregroundStyle(.secondary)
+            if threats.enabled, !threats.threats.isEmpty {
+                HStack {
+                    ThreatChips(counts: threats.counts())
+                    Spacer()
+                    NeptunCredit()
+                }
+            }
 
             Divider()
             HStack {
@@ -213,6 +225,7 @@ struct SettingsView: View {
     @AppStorage("sound") private var sound = true
     @AppStorage("menuTimer") private var menuTimer = false
     @AppStorage("autoLocation") private var autoLocation = true
+    @AppStorage("threatsEnabled") private var threatsEnabled = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     private var locationText: String {
@@ -267,6 +280,13 @@ struct SettingsView: View {
                 Toggle(T("Відбій", "All clear"), isOn: $notifyEnd)
                 Toggle(T("Звук сирени", "Siren sound"), isOn: $sound)
             }
+            Section(T("Ракети, шахеди, КАБи", "Missiles, drones, KABs")) {
+                Toggle(T("Показувати загрози в повітрі", "Show air threats"), isOn: $threatsEnabled)
+                    .onChange(of: threatsEnabled) { _, on in delegate.threats.setEnabled(on) }
+                Text(T("Позначки на карті, кількість за типами та найближча ціль. Дані NEPTUN (neptun.in.ua) — агрегатор моніторингових каналів, не офіційна система оповіщення; можливі неточності й затримки.",
+                       "Map markers, counts by type and the nearest target. Data by NEPTUN (neptun.in.ua), an aggregator of monitoring channels, not an official warning system; may be inaccurate or delayed."))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section(T("Дані", "Data")) {
                 SecureField(T("Власний API-ключ alerts.in.ua (необов'язково)", "Own alerts.in.ua API key (optional)"), text: $token)
                     .onSubmit { Task { await store.poll(); await store.loadHistory(force: true) } }
@@ -293,7 +313,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480)
-        .fixedSize(horizontal: false, vertical: true)
+        // The form grew taller than the screen; cap it and let it scroll.
+        .frame(width: 480, height: min(680, (NSScreen.main?.visibleFrame.height ?? 800) - 80))
     }
 }

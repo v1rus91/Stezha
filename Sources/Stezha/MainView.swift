@@ -4,6 +4,7 @@ import AppKit
 
 struct MainView: View {
     @Environment(AlertStore.self) private var store
+    @Environment(ThreatStore.self) private var threats
     /// SwiftUI keeps a closed window's view alive; render nothing then so animations stop.
     @State private var visible = false
 
@@ -26,6 +27,8 @@ struct MainView: View {
         ZStack {
             Backdrop(tint: tint)
             ScrollView {
+                // One container renders all glass cards in a single pass, which keeps scrolling smooth.
+                GlassEffectContainer(spacing: 0) {
                 VStack(spacing: 18) {
                     HStack(alignment: .top, spacing: 18) {
                         hero
@@ -35,12 +38,14 @@ struct MainView: View {
                         mapCard
                         activeCard.frame(width: 300)
                     }
+                    if threats.enabled { threatsCard }
                     HStack(alignment: .top, spacing: 18) {
                         timelineCard
                         countryCard.frame(width: 300)
                     }
                     historyCard
                     footer
+                }
                 }
                 .padding(28)
             }
@@ -66,11 +71,11 @@ struct MainView: View {
             HStack(spacing: 22) {
                 ZStack {
                     Circle().fill(tint.opacity(0.18)).frame(width: 96, height: 96)
-                    if tint != Palette.calm { PulseDot(color: tint.opacity(0.35), size: 96) }
+                    if status == .alert { PulseDot(color: tint.opacity(0.35), size: 96) }
                     Image(systemName: tint == Palette.calm ? "checkmark.shield.fill" : "light.beacon.max.fill")
                         .font(.system(size: 42, weight: .semibold))
                         .foregroundStyle(tint.gradient)
-                        .symbolEffect(.pulse, options: .repeating, isActive: tint != Palette.calm)
+                        .symbolEffect(.pulse, options: .repeating, isActive: status == .alert)
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     placePicker
@@ -90,6 +95,11 @@ struct MainView: View {
                         Text(T("Остання тривога завершилась ", "Last alert ended ") + Fmt.relative(end)
                              + " · " + T("тривала ", "lasted ") + Fmt.duration(end.timeIntervalSince(last.start)))
                             .foregroundStyle(.secondary)
+                    }
+                    if let (t, d) = threats.nearest(to: store.location), d < 100_000 {
+                        Label(T("Найближча загроза: ", "Nearest threat: ") + t.type.title.lowercased() + " · " + Dist.km(d) + (t.heading.map { " " + Dist.arrow($0) } ?? ""),
+                              systemImage: t.type.symbol)
+                            .font(.callout.weight(.semibold)).foregroundStyle(t.type.color)
                     }
                     if status != .alert, !store.otherRaids.isEmpty {
                         let list = store.otherRaids.map(\.title)
@@ -186,9 +196,16 @@ struct MainView: View {
                     Spacer()
                     MapLegend()
                 }
-                UkraineMap(states: store.states, home: store.home)
+                UkraineMap(states: store.states, home: store.home, threats: threats.mapped)
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 340)
+                if !threats.threats.isEmpty {
+                    HStack {
+                        ThreatChips(counts: threats.counts())
+                        Spacer()
+                        NeptunCredit()
+                    }
+                }
             }
         }
     }
@@ -232,6 +249,68 @@ struct MainView: View {
                     }
                 }
                 .frame(maxHeight: 330)
+            }
+        }
+    }
+
+    // MARK: threats
+
+    private var threatsCard: some View {
+        let list = threats.sorted(home: store.home, loc: store.location)
+        return GlassCard(radius: 28) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    CardTitle(title: T("Загрози в повітрі", "Air threats"), symbol: "scope", tint: ThreatType.missile.color)
+                    if threats.total > 0 {
+                        Text("\(threats.total)").font(.headline.monospacedDigit()).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    ThreatChips(counts: threats.counts(), size: 13)
+                }
+                if list.isEmpty {
+                    Text(threats.error ?? (threats.lastUpdate == nil ? T("Завантаження…", "Loading…") : T("Зараз активних цілей немає", "No active targets right now")))
+                        .foregroundStyle(.secondary)
+                } else {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 18), GridItem(.flexible(), spacing: 18)], spacing: 8) {
+                        ForEach(list.prefix(16)) { t in threatRow(t) }
+                    }
+                    if list.count > 16 {
+                        Text(T("…ще \(list.count - 16)", "…\(list.count - 16) more")).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                HStack {
+                    Text(T("Не офіційне оповіщення: дані моніторингових каналів, можливі неточності. Орієнтуйтесь на сирени.",
+                           "Not an official warning: monitoring-channel data, may be inaccurate. Follow the sirens."))
+                    Spacer()
+                    NeptunCredit()
+                }
+                .font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func threatRow(_ t: Threat) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle().fill(t.type.color.opacity(t.advisory ? 0.12 : 0.22)).frame(width: 30, height: 30)
+                Image(systemName: t.type.symbol).foregroundStyle(t.type.color.opacity(t.advisory ? 0.6 : 1))
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(t.title).fontWeight(t.region == store.home ? .semibold : .regular).lineLimit(1)
+                Text(t.areaOnly ? T("по області · ", "region-wide · ") + t.region : t.place)
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 1) {
+                if let loc = store.location, let d = t.distance(to: loc) {
+                    Text(Dist.km(d)).font(.callout.monospacedDigit())
+                        .foregroundStyle(d < 50_000 && !t.advisory ? Palette.alert : .primary)
+                }
+                HStack(spacing: 4) {
+                    if let h = t.heading, !t.areaOnly { Text(Dist.arrow(h)) }
+                    if let u = t.updatedAt { Text(Fmt.time(u)) }
+                }
+                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
         }
     }

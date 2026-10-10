@@ -32,6 +32,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     func stop() {
         manager.stopUpdatingLocation()
         store.locationState = .off
+        store.location = nil
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ m: CLLocationManager) {
@@ -39,6 +40,8 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ m: CLLocationManager, didFailWithError error: Error) {
+        // "Location unknown" is transient: Core Location keeps trying and reports a fix later.
+        if (error as? CLError)?.code == .locationUnknown { return }
         Task { @MainActor in
             if self.store.locationState == .searching { self.store.locationState = .failed }
         }
@@ -46,14 +49,18 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
 
     nonisolated func locationManager(_ m: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { return }
-        Task { @MainActor in await self.resolve(loc) }
+        Task { @MainActor in
+            self.store.location = loc
+            await self.resolve(loc)
+        }
     }
 
     private func resolve(_ loc: CLLocation) async {
         if let l = lastFix, Date.now.timeIntervalSince(l) < 600 { return }
-        lastFix = .now
         let marks = try? await CLGeocoder().reverseGeocodeLocation(loc, preferredLocale: Locale(identifier: "uk_UA"))
+        // Only a successful lookup starts the 10-minute pause, so a failed one is retried on the next fix.
         guard let p = marks?.first else { store.locationState = .failed; return }
+        lastFix = .now
         guard let oblast = Self.match(oblast: p.administrativeArea, locality: p.locality) else {
             store.locationState = .outside
             return

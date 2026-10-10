@@ -24,6 +24,7 @@ final class NotchPanel: NSPanel {
 @MainActor
 final class NotchController {
     private let store: AlertStore
+    private let threats: ThreatStore
     private let model = NotchModel()
     private var panel: NSPanel?
     private var monitors: [Any] = []
@@ -31,8 +32,9 @@ final class NotchController {
     private var autoCollapse: Task<Void, Never>?
     var openMain: () -> Void = {}
 
-    init(store: AlertStore) {
+    init(store: AlertStore, threats: ThreatStore) {
         self.store = store
+        self.threats = threats
     }
 
     func start() {
@@ -45,7 +47,7 @@ final class NotchController {
         p.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         p.isMovable = false
         p.ignoresMouseEvents = true
-        let host = NSHostingView(rootView: NotchView(model: model, open: { [weak self] in self?.openMain() }).environment(store))
+        let host = NSHostingView(rootView: NotchView(model: model, open: { [weak self] in self?.openMain() }).environment(store).environment(threats))
         host.sizingOptions = []
         p.contentView = host
         panel = p
@@ -163,6 +165,7 @@ struct NotchView: View {
     let model: NotchModel
     let open: () -> Void
     @Environment(AlertStore.self) private var store
+    @Environment(ThreatStore.self) private var threats
     @AppStorage("notchPill") private var pillMode = "never"   // always | alert | never
 
     private var status: HomeStatus { store.homeStatus }
@@ -250,8 +253,11 @@ struct NotchView: View {
             .frame(height: model.notchHeight)
 
             HStack(alignment: .top, spacing: 18) {
-                UkraineMap(states: store.states, home: store.home, compact: true)
-                    .frame(width: 330)
+                VStack(alignment: .trailing, spacing: 2) {
+                    UkraineMap(states: store.states, home: store.home, compact: true, threats: threats.mapped)
+                    if !threats.threats.isEmpty { NeptunCredit() }
+                }
+                .frame(width: 330)
                 info
             }
             .padding(.horizontal, 22)
@@ -295,8 +301,21 @@ struct NotchView: View {
             }
             .padding(.top, 2)
 
+            if !threats.threats.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    ThreatChips(counts: threats.counts(), size: 12)
+                    if let (t, d) = threats.nearest(to: store.location) {
+                        Text(T("найближча: ", "nearest: ") + t.type.title.lowercased() + " · " + Dist.km(d))
+                            .font(.system(size: 11)).foregroundStyle(d < 50_000 ? Palette.alert : .white.opacity(0.6)).lineLimit(1)
+                    } else if case let near = threats.inRegion(store.home), !near.isEmpty {
+                        Text(T("у вашій області: ", "in your oblast: ") + "\(near.reduce(0) { $0 + $1.count })")
+                            .font(.system(size: 11)).foregroundStyle(Palette.partial).lineLimit(1)
+                    }
+                }
+            }
+
             VStack(alignment: .leading, spacing: 4) {
-                ForEach(store.activeRegions.prefix(5), id: \.0.id) { r, s in
+                ForEach(store.activeRegions.prefix(threats.threats.isEmpty ? 5 : 3), id: \.0.id) { r, s in
                     HStack(spacing: 6) {
                         Circle().fill(s.full ? Palette.alert : Palette.partial).frame(width: 6, height: 6)
                         Text(r.short).lineLimit(1)
