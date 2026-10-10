@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key><string>Stezha</string>
+  <key>CFBundleIdentifier</key><string>com.v1rus.stezha</string>
+  <key>CFBundleName</key><string>Стежа</string>
+  <key>CFBundleDisplayName</key><string>Стежа</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleLocalizations</key><array><string>en</string><string>uk</string></array>
+  <key>LSMinimumSystemVersion</key><string>26.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.news</string>
+  <key>LSUIElement</key><true/>
+  <key>NSLocationUsageDescription</key><string>Стежа визначає ваш район, щоб показувати, чи є тривога саме у вас.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>Стежа визначає ваш район, щоб показувати, чи є тривога саме у вас.</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+</dict>
+</plist>

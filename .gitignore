@@ -1,0 +1,6 @@
+.build/
+build/
+dist/
+.DS_Store
+.apikey
+Sources/Stezha/Secrets.swift
